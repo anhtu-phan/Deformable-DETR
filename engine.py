@@ -156,7 +156,19 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
     stats = {k: meter.global_avg for k, meter in metric_logger.meters.items()}
     if coco_evaluator is not None:
         if 'bbox' in postprocessors.keys():
-            stats['coco_eval_bbox'] = coco_evaluator.coco_eval['bbox'].stats.tolist()
+            coco_eval_bbox = coco_evaluator.coco_eval['bbox'].stats.tolist()
+            stats['AP_50_95_all_100'] = coco_eval_bbox[0]
+            stats['AP_50_all_100'] = coco_eval_bbox[1]
+            stats['AP_75_all_100'] = coco_eval_bbox[2]
+            stats['AP_50_95_small_100'] = coco_eval_bbox[3]
+            stats['AP_50_95_medium_100'] = coco_eval_bbox[4]
+            stats['AP_50_95_large_100'] = coco_eval_bbox[5]
+            stats['AR_50_95_all_1'] = coco_eval_bbox[6]
+            stats['AR_50_95_all_10'] = coco_eval_bbox[7]
+            stats['AR_50_95_all_100'] = coco_eval_bbox[8]
+            stats['AR_50_95_small_100'] = coco_eval_bbox[9]
+            stats['AR_50_95_medium_100'] = coco_eval_bbox[10]
+            stats['AR_50_95_large_100'] = coco_eval_bbox[11]
         if 'segm' in postprocessors.keys():
             stats['coco_eval_masks'] = coco_evaluator.coco_eval['segm'].stats.tolist()
     if panoptic_res is not None:

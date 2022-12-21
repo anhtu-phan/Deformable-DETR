@@ -128,7 +128,7 @@ def get_args_parser():
 
 def main(args):
     print("start main ----->>>>>>>")
-    wandb.init(name=args.wandb_name, project="detr-fruit-detection")
+    wandb.init(name=args.wandb_name, project=args.wandb_project_name)
     utils.init_distributed_mode(args)
     print("git:\n  {}\n".format(utils.get_sha()))
 
@@ -329,6 +329,8 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Deformable DETR training and evaluation script', parents=[get_args_parser()])
     parser.add_argument('--wandb_name', help='path to load image for demo')
+    parser.add_argument('--wandb_project_name', help='path to load image for demo')
+    parser.add_argument('--num_classes', help='number of classes', default=None)
     args = parser.parse_args()
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)

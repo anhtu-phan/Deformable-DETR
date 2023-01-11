@@ -185,28 +185,17 @@ def main(args):
                 break
         return out
 
-    for n, p in model_without_ddp.named_parameters():
-        print(n)
+    # for n, p in model_without_ddp.named_parameters():
+    #     print(n)
 
     param_dicts = [
+        {"params": [p for n, p in model_without_ddp.named_parameters() if "backbone" not in n and p.requires_grad]},
         {
-            "params":
-                [p for n, p in model_without_ddp.named_parameters()
-                 if not match_name_keywords(n, args.lr_backbone_names) and not match_name_keywords(n,
-                                                                                                   args.lr_linear_proj_names) and p.requires_grad],
-            "lr": args.lr,
-        },
-        {
-            "params": [p for n, p in model_without_ddp.named_parameters() if
-                       match_name_keywords(n, args.lr_backbone_names) and p.requires_grad],
+            "params": [p for n, p in model_without_ddp.named_parameters() if "backbone" in n and p.requires_grad],
             "lr": args.lr_backbone,
-        },
-        {
-            "params": [p for n, p in model_without_ddp.named_parameters() if
-                       match_name_keywords(n, args.lr_linear_proj_names) and p.requires_grad],
-            "lr": args.lr * args.lr_linear_proj_mult,
         }
     ]
+
     if args.sgd:
         optimizer = torch.optim.SGD(param_dicts, lr=args.lr, momentum=0.9,
                                     weight_decay=args.weight_decay)
@@ -237,29 +226,45 @@ def main(args):
                 args.resume, map_location='cpu', check_hash=True)
         else:
             checkpoint = torch.load(args.resume, map_location='cpu')
-        missing_keys, unexpected_keys = model_without_ddp.load_state_dict(checkpoint['model'], strict=False)
-        unexpected_keys = [k for k in unexpected_keys if not (k.endswith('total_params') or k.endswith('total_ops'))]
-        if len(missing_keys) > 0:
-            print('Missing Keys: {}'.format(missing_keys))
-        if len(unexpected_keys) > 0:
-            print('Unexpected Keys: {}'.format(unexpected_keys))
+        from collections import OrderedDict
+        _ignorekeywordlist = args.finetune_ignore if args.finetune_ignore else []
+        ignorelist = []
+
+        def check_keep(keyname, ignorekeywordlist):
+            for keyword in ignorekeywordlist:
+                if keyword in keyname:
+                    ignorelist.append(keyname)
+                    return False
+            return True
+
+        _tmp_st = OrderedDict(
+            {k: v for k, v in utils.clean_state_dict(checkpoint['model']).items() if check_keep(k, _ignorekeywordlist)})
+        _load_output = model_without_ddp.load_state_dict(_tmp_st, strict=False)
+        print("Ignore keys: {}".format(json.dumps(ignorelist, indent=2)))
+        print(str(_load_output))
+        # print(str(_load_output))
+        # unexpected_keys = [k for k in unexpected_keys if not (k.endswith('total_params') or k.endswith('total_ops'))]
+        # if len(missing_keys) > 0:
+        #     print('Missing Keys: {}'.format(missing_keys))
+        # if len(unexpected_keys) > 0:
+        #     print('Unexpected Keys: {}'.format(unexpected_keys))
         if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
-            import copy
-            p_groups = copy.deepcopy(optimizer.param_groups)
+            # import copy
+            # p_groups = copy.deepcopy(optimizer.param_groups)
             optimizer.load_state_dict(checkpoint['optimizer'])
-            for pg, pg_old in zip(optimizer.param_groups, p_groups):
-                pg['lr'] = pg_old['lr']
-                pg['initial_lr'] = pg_old['initial_lr']
-            print(optimizer.param_groups)
+            # for pg, pg_old in zip(optimizer.param_groups, p_groups):
+            #     pg['lr'] = pg_old['lr']
+            #     pg['initial_lr'] = pg_old['initial_lr']
+            # print(optimizer.param_groups)
             lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
             # todo: this is a hack for doing experiment that resume from checkpoint and also modify lr scheduler (e.g., decrease lr in advance).
-            args.override_resumed_lr_drop = True
-            if args.override_resumed_lr_drop:
-                print(
-                    'Warning: (hack) args.override_resumed_lr_drop is set to True, so args.lr_drop would override lr_drop in resumed lr_scheduler.')
-                lr_scheduler.step_size = args.lr_drop
-                lr_scheduler.base_lrs = list(map(lambda group: group['initial_lr'], optimizer.param_groups))
-            lr_scheduler.step(lr_scheduler.last_epoch)
+            # args.override_resumed_lr_drop = True
+            # if args.override_resumed_lr_drop:
+            #     print(
+            #         'Warning: (hack) args.override_resumed_lr_drop is set to True, so args.lr_drop would override lr_drop in resumed lr_scheduler.')
+            #     lr_scheduler.step_size = args.lr_drop
+            #     lr_scheduler.base_lrs = list(map(lambda group: group['initial_lr'], optimizer.param_groups))
+            # lr_scheduler.step(lr_scheduler.last_epoch)
             # args.start_epoch = checkpoint['epoch'] + 1
         # check the resumed model
         if not args.eval:
@@ -330,7 +335,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('Deformable DETR training and evaluation script', parents=[get_args_parser()])
     parser.add_argument('--wandb_name', help='path to load image for demo')
     parser.add_argument('--wandb_project_name', help='path to load image for demo')
-    parser.add_argument('--num_classes', help='number of classes', default=None)
+    parser.add_argument('--num_classes', help='number of classes', default=None, type=int)
+    parser.add_argument('--finetune_ignore', type=str, nargs='+')
     args = parser.parse_args()
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
